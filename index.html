@@ -1,0 +1,182 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>表情認識</title>
+    <style>
+        /* video 要素の上に canvas 要素をオーバーレイするための CSS */
+        #container {              /* コンテナ用の div について */
+            position: relative;     /* 座標指定を相対値指定にする */
+        }
+        #video {                  /* カメラ映像を流す video について */
+            transform: scaleX(-1);  /* 左右反転させる */
+        }
+        #canvas {                 /* 描画用の canvas について */
+            transform: scaleX(-1);  /* 左右反転させる */
+            position: absolute;     /* 座標指定を絶対値指定にして */
+            left: 0;                /* X座標を0に */
+            top: 0;                 /* Y座標を0に */
+        }
+
+    </style>
+
+</head>
+
+<body>
+<div id="container">  <!-- video の上に canvas をオーバーレイするための div 要素 -->
+    <video id="video" width="400" height="300" autoplay></video>  <!-- カメラ映像を流す video -->
+    <canvas id="canvas" width="400" height="300"></canvas><!-- 重ねて描画する canvas -->
+
+</div>
+<div id="dat"></div>  <!-- データ表示用 div 要素 -->
+
+<!-- clmtrackr 関連ファイルの読み込み -->
+<script src="clmtrackr.js"></script>          <!-- clmtrackr のメインライブラリの読み込み -->
+<script src="model_pca_20_svm_emotion.js"></script>   <!-- 顔モデル（※1）の読み込み -->
+<script src="emotionClassifier.js"></script>  <!-- 感情を分類する外部関数の読み込み -->
+<script src="emotionModel.js"></script>       <!-- 感情モデル（※2）の読み込み -->
+
+<script>
+    // もろもろの準備
+    var video = document.getElementById("video");           // video 要素を取得
+    var canvas = document.getElementById("canvas");         // canvas 要素の取得
+    //var canvas2 = document.getElementById("canvas2");
+    var context = canvas.getContext("2d");                  // canvas の context の取得
+    //var context2 = canvas.getContext("2d");
+    var stampNose = new Image();                            // 鼻のスタンプ画像を入れる Image オブジェクト
+    var stampEars = new Image();                            // 耳のスタンプ画像を入れる Image オブジェクト
+    var stampTear = new Image();                            // ★涙のスタンプ画像を入れる Image オブジェクト
+    var stampSurp = new Image();                            // ★驚きのスタンプ画像を入れる Image オブジェクト
+    var stampEyes = new Image();                            // ★ハートのスタンプ画像を入れる Image オブジェクト
+    var stampMap  = new Image();
+    var stampShip = new Image();
+    stampNose.src = "nose.png";                             // 鼻のスタンプ画像のファイル名
+    stampEars.src = "ears.png";                             // 耳のスタンプ画像のファイル名
+    stampTear.src = "tear.png";                             // ★涙のスタンプ画像のファイル名
+    stampSurp.src = "surp.png";                             // ★驚きのスタンプ画像のファイル名
+    stampEyes.src = "eyes.png";                             // ★ハートのスタンプ画像のファイル名
+    stampMap.src  = "stampMap.jpg";
+    stampShip.src  = "icon_ship.png";
+
+
+
+    // getUserMedia によるカメラ映像の取得
+    var media = navigator.mediaDevices.getUserMedia({       // メディアデバイスを取得
+        video: {facingMode: "user"},                          // カメラの映像を使う（スマホならインカメラ）
+        audio: false                                          // マイクの音声は使わない
+    });
+    media.then((stream) => {                                // メディアデバイスが取得できたら
+        video.src = window.URL.createObjectURL(stream);       // video 要素にストリームを渡す
+    });
+
+    // clmtrackr の開始
+    var tracker = new clm.tracker();  // tracker オブジェクトを作成
+    tracker.init(pModel);             // tracker を所定のフェイスモデル（※1）で初期化
+    tracker.start(video);             // video 要素内でフェイストラッキング開始
+
+    // 感情分類の開始
+    var classifier = new emotionClassifier();               // emotionClassifier オブジェクトを作成
+    classifier.init(emotionModel);                          // classifier を所定の感情モデル（※2）で初期化
+
+    var vty =0;//船の座標　最初は0
+    var vtx =0;
+    //var xx = -vty;
+    //console.log(vtx)
+
+    // 描画ループ
+    function drawLoop() {
+        requestAnimationFrame(drawLoop);                      // drawLoop 関数を繰り返し実行
+        var positions = tracker.getCurrentPosition();         // 顔部品の現在位置の取得
+        var parameters = tracker.getCurrentParameters();      // ★現在の顔のパラメータを取得
+        var emotion = classifier.meanPredict(parameters);     // ★そのパラメータから感情を推定して emotion に結果を入れる
+        showEmotionData(emotion);                             // ★感情データを表示
+        context.clearRect(0, 0, canvas.width, canvas.height); // canvas をクリア
+        tracker.draw(canvas);                                 // canvas にトラッキング結果を描画
+
+        var positions = tracker.getCurrentPosition();         // 顔部品の現在位置の取得
+        var parameters = tracker.getCurrentParameters();      // 現在の顔のパラメータを取得
+        var emotion = classifier.meanPredict(parameters);     // そのパラメータから感情を推定して emotion に結果を入れる
+        context.clearRect(0, 0, canvas.width, canvas.height); // canvas をクリア
+        //tracker.draw(canvas);                                 // canvas にトラッキング結果を描画
+        drawStamp(positions, stampNose, 62, 2.5, 0.0, 0.0);   // 鼻のスタンプを描画
+        drawStamp(positions, stampEars, 33, 3.0, 0.0, -1.8);  // 耳のスタンプを描画
+
+        //drawStamp(positions,stampShip,62, 3.0, 0.0, 0.0);
+    }
+    drawLoop();                                             // drawLoop 関数をトリガー
+
+
+    // スタンプを描く drawStamp 関数
+    // (顔部品の位置データ, 画像, 基準位置, 大きさ, 横シフト, 縦シフト)
+    function drawStamp(pos, img, bNo, scale, hShift, vShift) {
+        var positions = tracker.getCurrentPosition();
+
+        var eyes = pos[32][0] - pos[27][0];                   // 幅の基準として両眼の間隔を求める
+        var nose = pos[62][1] - pos[33][1];                   // 高さの基準として眉間と鼻先の間隔を求める
+        var mouthH = pos[53][1] - pos[47][1];
+
+        var wScale = eyes / img.width;                        // 両眼の間隔をもとに画像のスケールを決める
+        var imgW = img.width * scale * wScale;                // 画像の幅をスケーリング
+        var imgH = img.height * scale * wScale;               // 画像の高さをスケーリング
+        var imgL = pos[bNo][0] - imgW / 2 + eyes * hShift;    // 画像のLeftを決める
+        var imgT = pos[bNo][1] - imgH / 2 + nose * vShift;    // 画像のTopを決める
+        context.drawImage(img, imgL, imgT, imgW, imgH);       // 画像を描く
+
+        if(mouthH > 20){
+        drawStamp2(positions,stampShip,7,1,0.0,0.0);
+
+        }
+    }
+    function drawStamp2(pos, img, bNo, scale, hShift, vShift) {
+        var eyes = pos[32][0] - pos[27][0];                   // 幅の基準として両眼の間隔を求める
+        var nose = pos[62][1] - pos[33][1];                   // 高さの基準として眉間と鼻先の間隔を求める
+        //var eh = pos[53][1] - pos[60][1];
+        var wScale = eyes / img.width;                        // 両眼の間隔をもとに画像のスケールを決める
+        var imgW = img.width * scale * wScale;                // 画像の幅をスケーリング
+        var imgH = img.height * scale * wScale;               // 画像の高さをスケーリング
+        var imgL = pos[bNo][0] - imgW / 2 + eyes * hShift;    // 画像のLeftを決める
+        var imgT = pos[bNo][1] - imgH / 2 + nose * vShift;    // 画像のTopを決める
+        context.drawImage(img, imgL, imgT, imgW, imgH);       // 画像を描く
+    }
+    function loadImages(sources, callback) {
+        var images = {};
+        var loadedImages = 0;
+        var numImages = 0;
+        // get num of sources
+        for(var src in sources) {
+            numImages++;
+        }
+        for(var src in sources) {
+            images[src] = new Image();
+            images[src].onload = function() {
+                if(++loadedImages >= numImages) {
+                    callback(images);
+                }
+            };
+            images[src].src = sources[src];
+        }
+    }
+    // ★感情データの表示
+    function showEmotionData(emo) {
+        var str ="";                                          // データの文字列を入れる変数
+        for(var i = 0; i < emo.length; i++) {                 // 全ての感情（6種類）について
+            str += emo[i].emotion + ": "                        // 感情名
+                + emo[i].value.toFixed(1) + "<br>";            // 感情の程度（小数第一位まで）
+        }
+        var dat = document.getElementById("dat");             // データ表示用div要素の取得
+        dat.innerHTML = str;                                  // データ文字列の表示
+    }
+    var sources = {
+        darthVader: 'https://www.html5canvastutorials.com/demos/assets/darth-vader.jpg',
+        yoda: 'https://www.html5canvastutorials.com/demos/assets/yoda.jpg'
+    };
+
+    loadImages(sources, function(images) {
+        context.drawImage(images.darthVader, 100, 30, 200, 137);
+        context.drawImage(images.yoda, 350, 55, 93, 104);
+    });
+</script>
+</body>
+</html>
